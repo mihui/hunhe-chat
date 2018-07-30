@@ -1,0 +1,26 @@
+{
+  "name": "hunhe-chat",
+  "version": "1.0.0",
+  "description": "Hunhe Chat",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mihui/hunhe-chat.git"
+  },
+  "keywords": [
+    "Chat"
+  ],
+  "author": "Michael",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mihui/hunhe-chat/issues"
+  },
+  "homepage": "https://github.com/mihui/hunhe-chat#readme",
+  "dependencies": {
+    "express": "^4.16.3",
+    "socket.io": "^2.1.1"
+  }
+}
