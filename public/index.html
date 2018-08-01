@@ -5,18 +5,40 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font: 13px Helvetica, Arial; }
-      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
-      form input { border: 0; padding: 10px; width: 85%; display: inline-block; margin-right: .5%; }
-      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; display: inline-block; }
-      #messages { list-style-type: none; margin: 0; padding: 0; }
-      #messages li { padding: 5px 10px; }
+      form { padding: 0px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 85%; display: inline-block; }
+      form button { background: rgb(130, 224, 255); border: none; padding: 10px; display: inline-block; }
+
+      #messages { list-style-type: none; margin: 0px; padding: 0px; margin-bottom: 50px; overflow: auto; }
+      #messages li { padding: 10px; }
       #messages li:nth-child(odd) { background: #eee; }
+
+      .ui-chat-panel li input, 
+      .ui-chat-panel li button { width: 100%; }
+
+      .ui-chat-login, 
+      .ui-chat-panel { color: #fff; background: rgb(112, 80, 255); padding: 3px; }
+      .ui-chat-panel li { display: inline-block; text-align: center; margin: 0px; padding: 0px; }
+
+      .ui-chat-panel li.to, 
+      .ui-chat-panel li.say { width: 5%; }
+      .ui-chat-panel li.to-input { width: 10%; }
+      .ui-chat-panel li.to-input input { text-align: center; }
+      .ui-chat-panel li.say-input { width: 50%; }
+      .ui-chat-panel li.say-button { width: 15%; }
+      .ui-chat-panel li.say-privately { width: 5%; }
+      .ui-chat-panel li.say-privately label { cursor: pointer; }
+      .ui-chat-panel li.say-privately input { width: auto; }
+      
       .ui-inline-input input { display: inline-block; width: 40%; }
       .ui-inline-input button { display: inline-block; width: 14%; }
       .ui-chat-form { display: none; }
 
-      #users li { padding: .3rem .5rem; }
-      #users li label { cursor: pointer; }
+      #users li { margin-bottom: 1px; }
+      #users li.ui-user-builtin { background: #eeeeff; }
+      #users li label { cursor: pointer; display: block; width: 100%; padding: .5rem; }
+      #users li label:hover { background: #eeccff; }
+      #users li label span { margin-left: .5rem; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
   </head>
@@ -27,11 +49,20 @@
     <ul id="messages"></ul>
 
     <form action="" class="ui-chat-form">
-      <input id="message" autocomplete="off" /><button>Send</button>
+      <ul class="ui-chat-panel">
+        <li class="to">对：</li>
+        <li class="to-input"><input id="for" readonly /></li>
+        <li class="say">说：</li>
+        <li class="say-input"><input id="message" autocomplete="off" /></li>
+        <li class="say-button"><button>Send</button></li>
+        <li class="say-privately">
+          <label><input type="checkbox" id="private" /> 私聊</label>
+        </li>
+      </ul>
     </form>
 
     <form action="" class="ui-login-form">
-      <div class="ui-inline-input">
+      <div class="ui-inline-input ui-chat-login">
         <input type="text" id="username" value="Michael" placeholder="Place your name here" autocomplete="off" />
         <input type="password" id="password" value="123456" placeholder="Place your password here" autocomplete="off" />
         <button>Login</button>

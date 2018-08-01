@@ -1,11 +1,13 @@
 var socket;
 
-var username = '', id = '', everyone = 'everyone';
+var username = '', id = '', selectedUser = '';
 var jChatForm = $('form.ui-chat-form'), 
     jLoginForm = $('form.ui-login-form'), 
     jMessageInput = $('#message'), 
     jHistory = $('#messages'), 
-    jUsers = $('#users');
+    jUsers = $('#users'), 
+    jToWho = $('#for'), 
+    jPrivate = $('#private');
 
 var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private',  
     EVT_WELCOME = 'Welcome', 
@@ -20,8 +22,11 @@ socket = io();
 socket.on(EVT_WELCOME, function (payload) {
     console.log('### EVT_WELCOME ###');
     id = payload.id;
+
+    jHistory.append($('<li>').text(payload.username + ' has joined.'));
 });
 socket.on(EVT_USERS, function (payload) {
+
     console.log('### EVT_USERS ###');
     console.log(payload);
     jUsers.empty();
@@ -29,15 +34,27 @@ socket.on(EVT_USERS, function (payload) {
         var jLi = $('<li></li>');
         var jInput = $('<input type="radio" name="user" />');
         var jLabel = $('<label></label>');
+        var jText = $('<span></span>');
+
+        jLabel.append(jInput);
         jLabel.attr('for', payload[i].id);
-        jLabel.text(payload[i].username);
+        jText.text(payload[i].username);
+        jLabel.append(jText);
+
         jInput.attr('id', payload[i].id);
         jInput.val(i);
-        jLi.html(jInput);
-        jLi.append(' ');
-        jLi.append(jLabel);
-        jUsers.append(jLi);
+        jInput.attr('data-builtin', payload[i].builtin ? 'yes' : 'no');
+        jInput.attr('data-username', payload[i].username);
         
+        if(payload[i].builtin) {
+            jLi.addClass('ui-user-builtin');
+            if(selectedUser.length === 0) {
+                selectedUser = payload[i].username;
+                jToWho.val(selectedUser);
+            }
+        }
+        jLi.html(jLabel);
+        jUsers.append(jLi);
     }
     console.log(jUsers);
 });
@@ -104,20 +121,35 @@ jChatForm.on('submit', function (evt) {
         return;
     }
 
-    var selectedUser = everyone;
-
     var type = type = EVT_CHAT;
 
-    var jUser = $('#users').find('input:checked');
+    var jUser = jUsers.find('input:checked');
+    var isPrivate = jPrivate.prop('checked');
 
-    if(jUser.length > 0) {
+    if(jUser.length > 0 && isPrivate) {
         type = EVT_CHAT_PRIVATE;
-        selectedUser = $('#users').find('input:checked').val();
+        
     }
-    var msg = { from: username, for: selectedUser, msg: message };
+
+    var msg = { from: username, for: selectedUser, msg: message, private: isPrivate };
 
     socket.emit(type, msg);
     
     jMessageInput.val('');
     return false;
+});
+
+jUsers.on('change', 'input', function(evt) {
+
+    var builtin = $(this).data('builtin');
+
+    console.log(builtin);
+    var forcePublic = builtin === 'yes';
+    if(forcePublic) {
+        jPrivate.prop('checked', false);
+    }
+    
+    selectedUser = $(this).data('username');
+    jToWho.val(selectedUser);
+    jMessageInput.focus();
 });
