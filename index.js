@@ -1,8 +1,34 @@
+require('dotenv').config();
 var express = require('express');
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var path = require('path');
+var AssistantV1 = require('watson-developer-cloud/assistant/v1');
+
+var assistant = new AssistantV1({
+    username: process.env.ASSISTANT_USERNAME || '<assistant_username>',
+    password: process.env.ASSISTANT_PASSWORD || '<assistant_password>',
+    version: '2018-02-16'
+});
+var sendMessage = (text, context) => {
+    var payload = {
+        workspace_id: process.env.ASSISTANT_WORKSPACE_ID || '<workspace_id>',
+        input: {
+            text: text
+        },
+        context: context
+    };
+    return new Promise((resolve, reject) =>
+        assistant.message(payload,  (err, data) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(data);
+            }
+        })
+    );
+};
 
 var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private', 
     EVT_WELCOME = 'Welcome', EVT_WELCOME_PRIVATE = 'Welcome Private', 
@@ -14,8 +40,8 @@ var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private',
 
 var users = {
     data: {
-        Everyone: { username: '大家', id: '_everyone', builtin: true }, 
-        Robot: { username: '店小二', id: '_robot', builtin: true }
+        Everyone: { username: '大家', id: '__everyone', builtin: true }, 
+        Robot: { username: '店小二', id: '__robot', builtin: true }
     }, 
     sockets: {
         Everyone: null, 
@@ -25,18 +51,85 @@ var users = {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-var buildUser = function(id, name, socket) {
+var buildUser = (id, name, socket) => {
 
     users.data[name] = { username: name, id: id, builtin: false };
     users.sockets[name] = socket;
-}, destroyUser = function(name) {
+
+}, destroyUser = (name) => {
 
     delete users.data[name];
     delete users.sockets[name];
-}, getUsers = function(callback) {
+
+}, getUsers = (callback) => {
 
     callback(users.data, users.sockets);
-}, normalizePort = function(val) {
+
+}, getCurrentTime = () => {
+
+    return new Date().getTime();
+
+}, filterForRobot = (payload, callback) => {
+
+    if(payload.for.id === '__robot') {
+
+        if(payload.hasOwnProperty('context') === false) {
+            payload.context = {
+                timezone: 'Asia/Shanghai'
+            };
+        }
+
+        sendMessage(payload.msg, payload.context).then(response => {
+
+            console.log('### ROBOT ###');
+            console.log(response);
+            payload.msg = response.output.text;
+            var tmp = payload.from;
+            payload.from = payload.for;
+            payload.for = tmp;
+            delete tmp;
+            // Response from Robot
+            callback(payload);
+        });
+        return true;
+    }
+    return false;
+
+}, onPrivateChat = (payload, socket) => {
+
+    var rooms = Object.keys(socket.rooms);
+
+    console.log(`### PRIVATE MESSAGE ###`);
+    console.log(payload);
+    console.log('### ROOMS ###');
+    console.log(rooms);
+    console.log('### USERS ###');
+    console.log(users.data);
+    payload.time = getCurrentTime();
+
+    // To the Person
+    var isRobot = filterForRobot(payload, (data) => {
+        socket.emit(EVT_CHAT_PRIVATE, data);
+    });
+
+    if(isRobot === false && users.data.hasOwnProperty(payload.for.username)) {
+        var room = users.data[payload.for.username].id;
+        socket.to(room).emit(EVT_CHAT_PRIVATE, payload);
+    }
+
+    // To Me
+    socket.emit(EVT_CHAT_PRIVATE, payload);
+
+}, onPublicChat = (payload) => {
+
+    payload.time = getCurrentTime();
+
+    filterForRobot(payload, (data) => {
+        io.sockets.emit(EVT_CHAT, data);
+    });
+    io.sockets.emit(EVT_CHAT, payload);
+
+}, normalizePort = (val) => {
 
     var port = parseInt(val, 10);
 
@@ -56,7 +149,7 @@ var buildUser = function(id, name, socket) {
 io.on('connection', (socket) => {
 
     var myId = socket.id;
-    var myName = '游客 [' + Math.round(Math.random() * 1000) + ']';
+    var myName = '游客-' + Math.round(Math.random() * 1000) + '';
 
     console.log(`### ${myId} connected. ###`);
 
@@ -64,40 +157,22 @@ io.on('connection', (socket) => {
 
     getUsers((data, sockets) => {
 
-        io.sockets.emit(EVT_WELCOME, { username: myName });
-        socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId });
-        io.sockets.emit(EVT_USERS, data);
-        console.log(data);
-    });
-
-    // socket.broadcast.emit(EVT_WELCOME, { id: myId });
-
-    // io.sockets.emit('some event', { for: 'everyone' });
-    // Private chatting callback
-    socket.on(EVT_CHAT_PRIVATE, (payload) => {
-
-        var rooms = Object.keys(socket.rooms);
-
-        console.log(`### PRIVATE MESSAGE ###`);
-        console.log(payload);
-        console.log('### ROOMS ###');
-        console.log(rooms);
-        console.log('### USERS ###');
-        console.log(users.data);
-
-        if(users.data.hasOwnProperty(payload.for)) {
-            var room = users.data[payload.for].id;
-            socket.to(room).emit(EVT_CHAT_PRIVATE, payload);
-        }
-
-        socket.emit(EVT_CHAT_PRIVATE, payload);
+        io.sockets.emit(EVT_WELCOME, { username: myName, id: myId, time: getCurrentTime() });
+        socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId, time: getCurrentTime() });
+        io.sockets.emit(EVT_USERS, { users: data, time: getCurrentTime() });
     });
 
     // Public chatting callback
     socket.on(EVT_CHAT, (payload) => {
 
         console.log('### CHAT ###');
-        io.sockets.emit(EVT_CHAT, payload);
+        console.log(payload);
+        if(payload.private) {
+            onPrivateChat(payload, socket);
+        }
+        else {
+            onPublicChat(payload);
+        }
     });
 
     // Public authentication callback
@@ -112,23 +187,26 @@ io.on('connection', (socket) => {
         var newUser = payload.auth;
         if(users.data.hasOwnProperty(newUser)) {
 
-            io.sockets.emit(EVT_USER_ALREAY_ONLINE, users.data);
+            socket.emit(EVT_USER_ALREAY_ONLINE, { users: users.data, time: getCurrentTime() });
             return;
         }
 
         // Changed from `游客-xxx` to actual name
         destroyUser(myName);
+        var oldUser = myName;
+
         myName = newUser;
         myId = socket.id;
         buildUser(myId, newUser, socket);
+
+        io.sockets.emit(EVT_JOINED, { oldUser: { id: socket.id, username: oldUser }, newUser: users.data[newUser], time: getCurrentTime() });
         /**
          * Do some checks, then
          * 
          * @param id
          * @param username
          */
-        io.sockets.emit(EVT_JOINED, users.data[newUser]);
-        io.sockets.emit(EVT_USERS, users.data);
+        io.sockets.emit(EVT_USERS, { users: users.data, time: getCurrentTime() });
     });
 
     // Public disconnection callback
@@ -137,15 +215,15 @@ io.on('connection', (socket) => {
         console.log('### DISCONNECTED ###');
         destroyUser(myName);
 
-        io.sockets.emit(EVT_LEFT, { username: myName });
-        io.sockets.emit(EVT_USERS, users.data);
+        io.sockets.emit(EVT_LEFT, { id: myId, username: myName, time: getCurrentTime() });
+        io.sockets.emit(EVT_USERS, { users: users.data, time: getCurrentTime() });
     });
 
 });
 
 var port = normalizePort(process.env.PORT || '9999');
-
-http.listen(port, function () {
+app.set('port', port);
+http.listen(port, () => {
 
     console.log(`### Listening on *: ${port}...`);
 });
