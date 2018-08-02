@@ -9,7 +9,7 @@ var AssistantV1 = require('watson-developer-cloud/assistant/v1');
 var assistant = new AssistantV1({
     username: process.env.ASSISTANT_USERNAME || '<assistant_username>',
     password: process.env.ASSISTANT_PASSWORD || '<assistant_password>',
-    version: '2018-02-16'
+    version: process.env.ASSISTANT_VERSION
 });
 var sendMessage = (text, context) => {
     var payload = {
