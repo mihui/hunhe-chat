@@ -1,0 +1,10 @@
+applications:
+- path: .
+  memory: 1024M
+  instances: 1
+  name: node-study
+  routes: 
+    - route: chat.mihui.net
+  disk_quota: 1024M
+  env:
+    API_V1_CONTEXT_PATH: "/api/v1"
