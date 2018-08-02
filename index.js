@@ -23,8 +23,6 @@ var users = {
     }
 };
 
-var port = 9999;
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 var buildUser = function(id, name, socket) {
@@ -38,6 +36,21 @@ var buildUser = function(id, name, socket) {
 }, getUsers = function(callback) {
 
     callback(users.data, users.sockets);
+}, normalizePort = function(val) {
+
+    var port = parseInt(val, 10);
+
+    if (isNaN(port)) {
+        // named pipe
+        return val;
+    }
+
+    if (port >= 0) {
+        // port number
+        return port;
+    }
+
+    return false;
 };
 
 io.on('connection', (socket) => {
@@ -129,6 +142,8 @@ io.on('connection', (socket) => {
     });
 
 });
+
+var port = normalizePort(process.env.PORT || '9999');
 
 http.listen(port, function () {
 
