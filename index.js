@@ -7,13 +7,14 @@ var path = require('path');
 var AssistantV1 = require('watson-developer-cloud/assistant/v1');
 
 var assistant = new AssistantV1({
-    username: process.env.ASSISTANT_USERNAME || '<assistant_username>',
-    password: process.env.ASSISTANT_PASSWORD || '<assistant_password>',
+    username: process.env.ASSISTANT_USERNAME,
+    password: process.env.ASSISTANT_PASSWORD,
     version: process.env.ASSISTANT_VERSION
 });
 var sendMessage = (text, context) => {
+
     var payload = {
-        workspace_id: process.env.ASSISTANT_WORKSPACE_ID || '<workspace_id>',
+        workspace_id: process.env.ASSISTANT_WORKSPACE_ID,
         input: {
             text: text
         },
@@ -69,28 +70,62 @@ var buildUser = (id, name, socket) => {
 
     return new Date().getTime();
 
-}, filterForRobot = (payload, callback) => {
+}, getGustName = () => {
+
+    var name = '游客-' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9);
+
+    if(users.data.hasOwnProperty(name)) {
+        return getGustName();
+    }
+    return name;
+}, 
+speakToRobot = (payload, callback) => {
+
+    if(payload.hasOwnProperty('context') === false) {
+        payload.context = {
+            timezone: 'Asia/Shanghai'
+        };
+    }
+
+    sendMessage(payload.msg, payload.context).then(response => {
+
+        console.log('### ROBOT ###');
+        var generic = response.output.generic;
+        var responseMessage = '';
+
+        for(var i in generic) {
+            var item = generic[i];
+            switch(item.response_type) {
+                case 'text':
+                    responseMessage += item.text;
+                    break;
+                case 'option':
+                    var options = item.options;
+                    responseMessage += '<div class="list-group list-group-chat">';
+                    responseMessage += '<a href="javascript:;" class="list-group-item list-group-item-action active">' + item.title + '</a>';
+                    for(var j in options) {
+                        responseMessage += `<a class="list-group-item list-group-item-action command" href="javascript:;" data-cmd="${options[j].value.input.text}">${options[j].label}</a>`;
+                    }
+                    responseMessage += '</div>';
+                break;
+            }
+        }
+        
+        payload.msg = responseMessage;
+        
+        var tmp = payload.from;
+        payload.from = payload.for;
+        payload.for = tmp;
+        delete tmp;
+        // Response from Robot
+        callback(payload);
+    });
+}, 
+filterForRobot = (payload, callback) => {
 
     if(payload.for.id === '__robot') {
 
-        if(payload.hasOwnProperty('context') === false) {
-            payload.context = {
-                timezone: 'Asia/Shanghai'
-            };
-        }
-
-        sendMessage(payload.msg, payload.context).then(response => {
-
-            console.log('### ROBOT ###');
-            console.log(response);
-            payload.msg = response.output.text;
-            var tmp = payload.from;
-            payload.from = payload.for;
-            payload.for = tmp;
-            delete tmp;
-            // Response from Robot
-            callback(payload);
-        });
+        speakToRobot(payload, callback);
         return true;
     }
     return false;
@@ -149,7 +184,7 @@ var buildUser = (id, name, socket) => {
 io.on('connection', (socket) => {
 
     var myId = socket.id;
-    var myName = '游客-' + Math.round(Math.random() * 1000) + '';
+    var myName = getGustName();
 
     console.log(`### ${myId} connected. ###`);
 
@@ -159,6 +194,12 @@ io.on('connection', (socket) => {
 
         io.sockets.emit(EVT_WELCOME, { username: myName, id: myId, time: getCurrentTime() });
         socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId, time: getCurrentTime() });
+
+        speakToRobot({ from: { id: myId, username: myName }, for: users.data.Robot, msg: '', time: getCurrentTime() }, (data) => {
+
+            socket.emit(EVT_CHAT_PRIVATE, data);
+        });
+
         io.sockets.emit(EVT_USERS, { users: data, time: getCurrentTime() });
     });
 
