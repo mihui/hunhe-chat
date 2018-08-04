@@ -4,32 +4,8 @@ var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var path = require('path');
-var AssistantV1 = require('watson-developer-cloud/assistant/v1');
 
-var assistant = new AssistantV1({
-    username: process.env.ASSISTANT_USERNAME,
-    password: process.env.ASSISTANT_PASSWORD,
-    version: process.env.ASSISTANT_VERSION
-});
-var sendMessage = (text, context) => {
-
-    var payload = {
-        workspace_id: process.env.ASSISTANT_WORKSPACE_ID,
-        input: {
-            text: text
-        },
-        context: context
-    };
-    return new Promise((resolve, reject) =>
-        assistant.message(payload,  (err, data) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(data);
-            }
-        })
-    );
-};
+var waiter = require('./libraries/waiter.js')();
 
 var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private', 
     EVT_WELCOME = 'Welcome', EVT_WELCOME_PRIVATE = 'Welcome Private', 
@@ -87,7 +63,7 @@ speakToRobot = (payload, callback) => {
         };
     }
 
-    sendMessage(payload.msg, payload.context).then(response => {
+    waiter.sendMessage(payload.msg, payload.context).then(response => {
 
         console.log('### ROBOT ###');
         var generic = response.output.generic;
@@ -120,8 +96,7 @@ speakToRobot = (payload, callback) => {
         // Response from Robot
         callback(payload);
     });
-}, 
-filterForRobot = (payload, callback) => {
+}, filterForRobot = (payload, callback) => {
 
     if(payload.for.id === '__robot') {
 
