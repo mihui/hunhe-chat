@@ -46,12 +46,15 @@ var buildUser = (id, name, socket) => {
 
     return new Date().getTime();
 
-}, getGustName = () => {
+}, getGustName = (nm) => {
 
-    var name = '游客-' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9);
+    var name = nm;
+    if(typeof(nm) === 'undefined' || nm.length < 2) {
+        name =  '游客-' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9);
+    }
 
     if(users.data.hasOwnProperty(name)) {
-        return getGustName();
+        return getGustName('');
     }
     return name;
 }, 
@@ -159,7 +162,7 @@ speakToRobot = (payload, callback) => {
 io.on('connection', (socket) => {
 
     var myId = socket.id;
-    var myName = getGustName();
+    var myName = getGustName(socket.handshake.query.username);
 
     console.log(`### ${myId} connected. ###`);
 
