@@ -6,6 +6,7 @@ var io = require('socket.io')(http);
 var path = require('path');
 
 var waiter = require('./libraries/waiter.js')();
+var cloudant = require('./libraries/cloudant.js')();
 
 var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private', 
     EVT_WELCOME = 'Welcome', EVT_WELCOME_PRIVATE = 'Welcome Private', 
@@ -141,6 +142,7 @@ speakToRobot = (payload, callback) => {
         io.sockets.emit(EVT_CHAT, data);
     });
     io.sockets.emit(EVT_CHAT, payload);
+    storeChat(EVT_CHAT, payload);
 
 }, normalizePort = (val) => {
 
@@ -157,6 +159,13 @@ speakToRobot = (payload, callback) => {
     }
 
     return false;
+}, storeChat = function(type, message) {
+
+    var doc = cloudant.useDB('chats');
+
+    doc.insert({ type: type, message: message }).then((body) => {
+        console.log(body);
+    });
 };
 
 io.on('connection', (socket) => {
@@ -170,8 +179,10 @@ io.on('connection', (socket) => {
 
     getUsers((data, sockets) => {
 
-        io.sockets.emit(EVT_WELCOME, { username: myName, id: myId, time: getCurrentTime() });
-        socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId, time: getCurrentTime() });
+        var welcomeMessage = { username: myName, id: myId, time: getCurrentTime() };
+        io.sockets.emit(EVT_WELCOME, welcomeMessage);
+        socket.emit(EVT_WELCOME_PRIVATE, welcomeMessage);
+        storeChat(EVT_WELCOME, welcomeMessage);
 
         speakToRobot({ from: { id: myId, username: myName }, for: users.data.Robot, msg: '', time: getCurrentTime() }, (data) => {
 
@@ -234,8 +245,12 @@ io.on('connection', (socket) => {
         console.log('### DISCONNECTED ###');
         destroyUser(myName);
 
-        io.sockets.emit(EVT_LEFT, { id: myId, username: myName, time: getCurrentTime() });
+        var data = { id: myId, username: myName, time: getCurrentTime() };
+
+        io.sockets.emit(EVT_LEFT, data);
         io.sockets.emit(EVT_USERS, { users: users.data, time: getCurrentTime() });
+
+        storeChat(EVT_LEFT, data);
     });
 
 });
