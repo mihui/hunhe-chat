@@ -4,40 +4,23 @@ var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var path = require('path');
-var AssistantV1 = require('watson-developer-cloud/assistant/v1');
 
-var assistant = new AssistantV1({
-    username: process.env.ASSISTANT_USERNAME,
-    password: process.env.ASSISTANT_PASSWORD,
-    version: process.env.ASSISTANT_VERSION
-});
-var sendMessage = (text, context) => {
+var waiter = require('./libraries/waiter.js')();
+var cloudant = require('./libraries/cloudant.js')();
 
-    var payload = {
-        workspace_id: process.env.ASSISTANT_WORKSPACE_ID,
-        input: {
-            text: text
-        },
-        context: context
-    };
-    return new Promise((resolve, reject) =>
-        assistant.message(payload,  (err, data) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(data);
-            }
-        })
-    );
+var EVENTS = {
+    CHAT: 'Chat Message', 
+    CHAT_PRIVATE: 'Chat Message Private', 
+    WELCOME: 'Welcome', 
+    WELCOME_PRIVATE: 'Welcome Private', 
+    JOINED: 'Joined', 
+    USERS: 'Users', 
+    LEFT: 'Left', 
+    AUTHENTICATION: 'Authentication', 
+    USER_ALREAY_ONLINE: 'User is online already'
 };
 
-var EVT_CHAT = 'Chat Message', EVT_CHAT_PRIVATE = 'Chat Message Private', 
-    EVT_WELCOME = 'Welcome', EVT_WELCOME_PRIVATE = 'Welcome Private', 
-    EVT_JOINED = 'Joined', 
-    EVT_USERS = 'Users', 
-    EVT_LEFT = 'Left', 
-    EVT_AUTHENTICATION = 'Authentication', 
-    EVT_USER_ALREAY_ONLINE = 'User is online already';
+var isLocal = process.env.VCAP_SERVICES ? true : false;
 
 var users = {
     data: {
@@ -51,6 +34,11 @@ var users = {
 };
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use('/api/v1/settings', (req, res, next) => {
+
+    return res.send({ CHATROOM_EVENTS: EVENTS });
+});
 
 var buildUser = (id, name, socket) => {
 
@@ -70,12 +58,15 @@ var buildUser = (id, name, socket) => {
 
     return new Date().getTime();
 
-}, getGustName = () => {
+}, getGustName = (nm) => {
 
-    var name = '游客-' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9);
+    var name = nm;
+    if(typeof(nm) === 'undefined' || nm.length < 2) {
+        name =  '游客-' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9) + '' + Math.round(Math.random() * 9);
+    }
 
     if(users.data.hasOwnProperty(name)) {
-        return getGustName();
+        return getGustName('');
     }
     return name;
 }, speakToRobot = (payload, callback) => {
@@ -86,7 +77,7 @@ var buildUser = (id, name, socket) => {
         };
     }
 
-    sendMessage(payload.msg, payload.context).then(response => {
+    waiter.sendMessage(payload.msg, payload.context).then(response => {
 
         console.log('### ROBOT ###');
         var generic = response.output.generic;
@@ -142,25 +133,26 @@ var buildUser = (id, name, socket) => {
 
     // To the Person
     var isRobot = filterForRobot(payload, (data) => {
-        socket.emit(EVT_CHAT_PRIVATE, data);
+        socket.emit(EVENTS.CHAT_PRIVATE, data);
     });
 
     if(isRobot === false && users.data.hasOwnProperty(payload.for.username)) {
         var room = users.data[payload.for.username].id;
-        socket.to(room).emit(EVT_CHAT_PRIVATE, payload);
+        socket.to(room).emit(EVENTS.CHAT_PRIVATE, payload);
     }
 
     // To Me
-    socket.emit(EVT_CHAT_PRIVATE, payload);
+    socket.emit(EVENTS.CHAT_PRIVATE, payload);
 
 }, onPublicChat = (payload) => {
 
     payload.time = getCurrentTime();
 
     filterForRobot(payload, (data) => {
-        io.sockets.emit(EVT_CHAT, data);
+        io.sockets.emit(EVENTS.CHAT, data);
     });
-    io.sockets.emit(EVT_CHAT, payload);
+    io.sockets.emit(EVENTS.CHAT, payload);
+    storeChat(EVENTS.CHAT, payload);
 
 }, normalizePort = (val) => {
 
@@ -177,12 +169,19 @@ var buildUser = (id, name, socket) => {
     }
 
     return false;
+}, storeChat = function(type, message) {
+
+    var doc = cloudant.useDB(isLocal ? 'chats-dev' : 'chats');
+
+    doc.insert({ type: type, message: message }).then((body) => {
+        console.log(body);
+    });
 };
 
 io.on('connection', (socket) => {
 
     var myId = socket.id;
-    var myName = getGustName();
+    var myName = getGustName(socket.handshake.query.username);
 
     console.log(`### ${myId} connected. ###`);
 
@@ -190,19 +189,21 @@ io.on('connection', (socket) => {
 
     getUsers((data, sockets) => {
 
-        io.sockets.emit(EVT_WELCOME, { username: myName, id: myId, time: getCurrentTime() });
-        socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId, time: getCurrentTime() });
+        var welcomeMessage = { username: myName, id: myId, time: getCurrentTime() };
+        io.sockets.emit(EVENTS.WELCOME, welcomeMessage);
+        socket.emit(EVENTS.WELCOME_PRIVATE, welcomeMessage);
+        storeChat(EVENTS.WELCOME, welcomeMessage);
 
         speakToRobot({ from: { id: myId, username: myName, builtin: false }, for: users.data.Robot, msg: '', time: getCurrentTime() }, (data) => {
 
-            socket.emit(EVT_CHAT_PRIVATE, data);
+            socket.emit(EVENTS.CHAT_PRIVATE, data);
         });
 
-        io.sockets.emit(EVT_USERS, { users: data, time: getCurrentTime() });
+        io.sockets.emit(EVENTS.USERS, { users: data, time: getCurrentTime() });
     });
 
     // Public chatting callback
-    socket.on(EVT_CHAT, (payload) => {
+    socket.on(EVENTS.CHAT, (payload) => {
 
         console.log('### CHAT ###');
         console.log(payload);
@@ -215,7 +216,7 @@ io.on('connection', (socket) => {
     });
 
     // Public authentication callback
-    socket.on(EVT_AUTHENTICATION, (payload) => {
+    socket.on(EVENTS.AUTHENTICATION, (payload) => {
 
         console.log(`### AUTHENTICATION: ${payload.auth} ###`);
 
@@ -226,7 +227,7 @@ io.on('connection', (socket) => {
         var newUser = payload.auth;
         if(users.data.hasOwnProperty(newUser)) {
 
-            socket.emit(EVT_USER_ALREAY_ONLINE, { users: users.data, time: getCurrentTime() });
+            socket.emit(EVENTS.USER_ALREAY_ONLINE, { users: users.data, time: getCurrentTime() });
             return;
         }
 
@@ -238,14 +239,14 @@ io.on('connection', (socket) => {
         myId = socket.id;
         buildUser(myId, newUser, socket);
 
-        io.sockets.emit(EVT_JOINED, { oldUser: { id: socket.id, username: oldUser }, newUser: users.data[newUser], time: getCurrentTime() });
+        io.sockets.emit(EVENTS.JOINED, { oldUser: { id: socket.id, username: oldUser }, newUser: users.data[newUser], time: getCurrentTime() });
         /**
          * Do some checks, then
          * 
          * @param id
          * @param username
          */
-        io.sockets.emit(EVT_USERS, { users: users.data, time: getCurrentTime() });
+        io.sockets.emit(EVENTS.USERS, { users: users.data, time: getCurrentTime() });
     });
 
     // Public disconnection callback
@@ -254,8 +255,12 @@ io.on('connection', (socket) => {
         console.log('### DISCONNECTED ###');
         destroyUser(myName);
 
-        io.sockets.emit(EVT_LEFT, { id: myId, username: myName, time: getCurrentTime() });
-        io.sockets.emit(EVT_USERS, { users: users.data, time: getCurrentTime() });
+        var data = { id: myId, username: myName, time: getCurrentTime() };
+
+        io.sockets.emit(EVENTS.LEFT, data);
+        io.sockets.emit(EVENTS.USERS, { users: users.data, time: getCurrentTime() });
+
+        storeChat(EVENTS.LEFT, data);
     });
 
 });
