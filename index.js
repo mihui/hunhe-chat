@@ -78,8 +78,7 @@ var buildUser = (id, name, socket) => {
         return getGustName();
     }
     return name;
-}, 
-speakToRobot = (payload, callback) => {
+}, speakToRobot = (payload, callback) => {
 
     if(payload.hasOwnProperty('context') === false) {
         payload.context = {
@@ -120,8 +119,7 @@ speakToRobot = (payload, callback) => {
         // Response from Robot
         callback(payload);
     });
-}, 
-filterForRobot = (payload, callback) => {
+}, filterForRobot = (payload, callback) => {
 
     if(payload.for.id === '__robot') {
 
@@ -195,7 +193,7 @@ io.on('connection', (socket) => {
         io.sockets.emit(EVT_WELCOME, { username: myName, id: myId, time: getCurrentTime() });
         socket.emit(EVT_WELCOME_PRIVATE, { username: myName, id: myId, time: getCurrentTime() });
 
-        speakToRobot({ from: { id: myId, username: myName }, for: users.data.Robot, msg: '', time: getCurrentTime() }, (data) => {
+        speakToRobot({ from: { id: myId, username: myName, builtin: false }, for: users.data.Robot, msg: '', time: getCurrentTime() }, (data) => {
 
             socket.emit(EVT_CHAT_PRIVATE, data);
         });
