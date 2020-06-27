@@ -1,30 +1,33 @@
 module.exports = () => {
 
-    var AssistantV1 = require('watson-developer-cloud/assistant/v1');
-    var assistant = new AssistantV1({
-        username: process.env.ASSISTANT_USERNAME,
-        password: process.env.ASSISTANT_PASSWORD,
-        version: process.env.ASSISTANT_VERSION
+    const AssistantV2 = require('ibm-watson/assistant/v2');
+    const { IamAuthenticator } = require('ibm-watson/auth');
+    
+    const assistant = new AssistantV2({
+      version: process.env.ASSISTANT_VERSION,
+      authenticator: new IamAuthenticator({
+        apikey: process.env.ASSISTANT_API_KEY,
+      }),
+      url: 'https://gateway-tok.watsonplatform.net/assistant/api',
+      disableSslVerification: true
     });
 
     return {
-        sendMessage: (text, context) => {
-            var payload = {
-                workspace_id: process.env.ASSISTANT_WORKSPACE_ID,
-                input: {
-                    text: text
-                },
-                context: context
-            };
-            return new Promise((resolve, reject) =>
-                assistant.message(payload,  (err, data) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(data);
+        sendMessage: async (text) => {
+            try {
+                const response = await assistant.messageStateless({
+                    assistantId: process.env.ASSISTANT_ID,
+                    input: {
+                        'message_type': 'text',
+                        'text': text,
                     }
-                })
-            );
+                });
+                const result = response.result;
+                return result;
+            }
+            catch (error) {
+                return '';
+            }
         }
     }
 };

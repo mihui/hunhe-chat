@@ -1,6 +1,10 @@
 module.exports = () => {
 
     var cloudant_url = process.env.CLOUDANT_DB_URL;
+    if(cloudant_url.length === 0) {
+
+        return {};
+    }
     var cloudant = require('nano')(cloudant_url);
 
     return {

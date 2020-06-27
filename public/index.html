@@ -4,29 +4,40 @@
     <title>Socket.IO chat</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font: 13px Helvetica, Arial; }
+      html { height: 100%; }
+      body { font: 1rem Helvetica, Arial; height: 100%; }
       form { padding: 0px; position: fixed; bottom: 0; width: 100%; }
       form input { border: 0; padding: 10px; width: 85%; display: inline-block; }
-      form button { background: rgb(130, 224, 255); border: none; padding: 10px; display: inline-block; }
+      form button { border: none; padding: 10px; display: inline-block; }
 
-      #messages { list-style-type: none; margin: 0px; padding: 0px; margin-bottom: 50px; overflow: auto; }
-      #messages li { padding: 10px; }
-      #messages li:nth-child(odd) { background: #eee; }
+      .ui-main { display: flex; height: 100%; overflow: hidden; }
+      .ui-main .ui-userlist { flex: 1; margin-bottom: 50px; background: #fff; border: 1px solid #eee; min-width: 200px; height: 100%; overflow: auto; }
+      .ui-main #messages { flex: 3; list-style-type: none; margin: 0px; padding: 0px; margin-bottom: 60px; padding-bottom: 60px; overflow: auto; height: 100%; }
+      .ui-main #messages li { padding: 1rem; margin-bottom: 1px; }
+      .ui-main #messages li:nth-child(odd) { background: #eee; }
+      .ui-main #messages li a.username { cursor: pointer; text-decoration: none; transition: 0.5s all ease-in-out; }
+      .ui-main #messages li a.me { color: rgb(108, 93, 209); }
+      .ui-main #messages li .t { font-size: .8rem; color: #868e96; }
+      .ui-main #messages li.private .t { color: #ddd; }
+
+      .ui-main #messages li .t::before { content: ' '; }
+      .ui-main #messages li .t::after { content: ' '; }
 
       .ui-chat-panel li input, 
       .ui-chat-panel li button { width: 100%; }
 
+      .ui-chat-login { padding: 1rem; }
       .ui-chat-login, 
-      .ui-chat-panel { color: #fff; background: rgb(112, 80, 255); padding: 3px; }
-      .ui-chat-panel li { display: inline-block; text-align: center; margin: 0px; padding: 0px; }
+      .ui-chat-panel { color: #fff; background: #000; }
+      .ui-chat-panel li { display: inline-block; text-align: center; margin: 0px; padding: 0.8rem; }
 
       .ui-chat-panel li.to, 
       .ui-chat-panel li.say { width: 5%; }
+      .ui-chat-panel li.from-input input { text-align: center; }
+      .ui-chat-panel li.from-input,
       .ui-chat-panel li.to-input { width: 10%; }
       .ui-chat-panel li.to-input input { text-align: center; }
       .ui-chat-panel li.say-input { width: 50%; }
-      .ui-chat-panel li.say-button { width: 15%; }
-      .ui-chat-panel li.say-privately { width: 5%; }
       .ui-chat-panel li.say-privately label { cursor: pointer; }
       .ui-chat-panel li.say-privately input { width: auto; }
       
@@ -34,27 +45,39 @@
       .ui-inline-input button { display: inline-block; width: 14%; }
       .ui-chat-form { display: none; }
 
-      #users li { margin-bottom: 1px; }
-      #users li.ui-user-builtin { background: #eeeeff; }
-      #users li label { cursor: pointer; display: block; width: 100%; padding: .5rem; }
-      #users li label:hover { background: #eeccff; }
-      #users li label span { margin-left: .5rem; }
+      .ui-main .ui-userlist #users li { margin-bottom: 1px; border-bottom: 1px solid #eee; }
+      .ui-main .ui-userlist #users li.ui-user-builtin { color: rgb(91, 26, 145); font-weight: 400; }
+      .ui-main .ui-userlist #users li label { cursor: pointer; display: block; width: 100%; padding: 1rem; }
+      .ui-main .ui-userlist #users li label:hover { background: #ddd; }
+      .ui-main .ui-userlist #users li label span { margin-left: .5rem; }
+
+      .ui-main #messages li.chat { padding: 15px; border-bottom: 1px solid #ddd; }
+
+      .ui-main #messages li.relevant { background: #fafafa; color: inherit; }
+      .ui-main #messages li.private { background: rgb(108, 93, 209); color: #fff; }
+      .ui-main #messages li.private a, 
+      .ui-main #messages li.private a.me { color: #fff; }
+      .ui-main #messages li.private .list-group-chat .list-group-item-action { color: #495057; }
+      .ui-main #messages li.private .list-group-chat .list-group-item.active { color: inherit; }
+
     </style>
     <script src="/socket.io/socket.io.js"></script>
   </head>
   <body>
-    <div class="ui-private-panel">
+    <div class="ui-main">
+      <div class="ui-userlist">
         <ul id="users"></ul>
+      </div>
+      <ul id="messages"></ul>
     </div>
-    <ul id="messages"></ul>
 
     <form action="" class="ui-chat-form">
       <ul class="ui-chat-panel">
+        <li class="from-input"><input id="from" readonly /></li>
         <li class="to">对：</li>
         <li class="to-input"><input id="for" readonly /></li>
         <li class="say">说：</li>
         <li class="say-input"><input id="message" autocomplete="off" /></li>
-        <li class="say-button"><button>Send</button></li>
         <li class="say-privately">
           <label><input type="checkbox" id="private" /> 私聊</label>
         </li>
@@ -69,7 +92,8 @@
       </div>
     </form>
 
-    <script src="/js/jquery-3.3.1.min.js"></script>
+    <script src="/js/jquery-3.5.1.min.js"></script>
+    <script src="/js/jquery.easing.min.js"></script>
     <script src="/js/base64.js"></script>
     <script src="/js/main.js"></script>
   </body>
